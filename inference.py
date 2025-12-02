@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from sampling import autoregressive_generate, speculative_generate
-from utils.logits_processor import GreedyProcessor, MultinomialProcessor, TopKProcessor, NucleusProcessor, TopKNucleusProcessor
+from utils.sampling_strategies import GreedySampler, MultinomialSampler, TopKSampler, NucleusSampler, TopKNucleusSampler
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
@@ -43,25 +43,25 @@ class GenerationConfig:
 @dataclass 
 class SamplingConfig:
     """Configuration for sampling strategy."""
-    processor: str = "greedy"
+    sampler: str = "greedy"
     temperature: float = 1.0
     top_k: int = 50
     top_p: float = 0.9
     
-    def build_processor(self):
-        """Build the logits processor based on config."""
-        processors = {
-            "greedy": lambda: GreedyProcessor(temperature=self.temperature),
-            "multinomial": lambda: MultinomialProcessor(temperature=self.temperature),
-            "topk": lambda: TopKProcessor(temperature=self.temperature, top_k=self.top_k),
-            "nucleus": lambda: NucleusProcessor(temperature=self.temperature, top_p=self.top_p),
-            "topknucleus": lambda: TopKNucleusProcessor(
+    def build_sampler(self):
+        """Build the sampler based on config."""
+        samplers = {
+            "greedy": lambda: GreedySampler(temperature=self.temperature),
+            "multinomial": lambda: MultinomialSampler(temperature=self.temperature),
+            "topk": lambda: TopKSampler(temperature=self.temperature, top_k=self.top_k),
+            "nucleus": lambda: NucleusSampler(temperature=self.temperature, top_p=self.top_p),
+            "topknucleus": lambda: TopKNucleusSampler(
                 temperature=self.temperature, top_k=self.top_k, top_p=self.top_p
             ),
         }
-        if self.processor not in processors:
-            raise ValueError(f"Unknown processor: {self.processor}. Available: {list(processors.keys())}")
-        return processors[self.processor]()
+        if self.sampler not in samplers:
+            raise ValueError(f"Unknown sampler: {self.sampler}. Available: {list(samplers.keys())}")
+        return samplers[self.sampler]()
 
 
 @dataclass
@@ -112,7 +112,7 @@ class Config:
                 chat_mode=data['generation'].get('chat_mode', True),
             ),
             sampling=SamplingConfig(
-                processor=data['sampling'].get('processor', 'greedy'),
+                sampler=data['sampling'].get('sampler', 'greedy'),
                 temperature=data['sampling'].get('temperature', 1.0),
                 top_k=data['sampling'].get('top_k', 50),
                 top_p=data['sampling'].get('top_p', 0.9),
@@ -154,8 +154,8 @@ class SpeculativeDecodingInference:
         self.config = config
         self.device = config.device
         
-        # Build processor from config
-        self.processor = config.sampling.build_processor()
+        # Build sampler from config
+        self.sampler = config.sampling.build_sampler()
 
         self._load_models()
         self._print_config()
@@ -200,7 +200,7 @@ class SpeculativeDecodingInference:
         print(colored("\n=== Configuration ===", on_color="on_blue"))
         print(f"  Gamma: {self.config.generation.gamma}")
         print(f"  Max length: {self.config.generation.max_length}")
-        print(f"  Sampling: {self.config.sampling.processor} (T={self.config.sampling.temperature})")
+        print(f"  Sampler: {self.config.sampling.sampler} (T={self.config.sampling.temperature})")
         print(f"  Cache: {self.config.generation.use_cache}")
         print(f"  Chat mode: {self.config.generation.chat_mode}")
         print(colored("  Inference modes:", "cyan"))
@@ -249,7 +249,7 @@ class SpeculativeDecodingInference:
                 self.drafter,
                 self.target,
                 tokenizer=self.tokenizer,
-                logits_processor=self.processor,
+                logits_processor=self.sampler,
                 gamma=self.config.generation.gamma,
                 max_gen_len=self.config.generation.max_length,
                 eos_tokens_id=self.end_tokens,
@@ -283,7 +283,7 @@ class SpeculativeDecodingInference:
                 use_cache=self.config.generation.use_cache,
                 max_gen_len=self.config.generation.max_length,
                 eos_tokens_id=self.end_tokens,
-                logits_processor=self.processor,
+                logits_processor=self.sampler,
                 debug=self.config.debug.enabled,
             )
             elapsed = time.time() - start_time
@@ -311,7 +311,7 @@ class SpeculativeDecodingInference:
                 use_cache=self.config.generation.use_cache,
                 max_gen_len=self.config.generation.max_length,
                 eos_tokens_id=self.end_tokens,
-                logits_processor=self.processor,
+                logits_processor=self.sampler,
                 debug=self.config.debug.enabled,
             )
             elapsed = time.time() - start_time

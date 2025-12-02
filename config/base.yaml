@@ -19,7 +19,7 @@ generation:
 # Sampling Strategy
 
 sampling:
-  processor: "greedy"         # Available processors: greedy, multinomial, topk, nucleus, topknucleus
+  sampler: "greedy"           # Available: greedy, multinomial, topk, nucleus, topknucleus
   temperature: 1.0
   top_k: 50                   # For topk and topknucleus
   top_p: 0.9                  # For nucleus and topknucleus
