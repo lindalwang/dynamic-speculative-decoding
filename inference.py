@@ -123,10 +123,10 @@ class Config:
                 target_autoregressive=data['inference_modes'].get('target_autoregressive', True),
                 drafter_autoregressive=data['inference_modes'].get('drafter_autoregressive', False),
             ),
-            # debug=DebugConfig(
-            #     enabled=data['debug'].get('enabled', False),
-            #     seed=data['debug'].get('seed', 42),
-            # ),
+            debug=DebugConfig(
+                enabled=data['debug'].get('enabled', False),
+                seed=data['debug'].get('seed', 42),
+            ),
             device=data.get('device', 'cuda'),
         )
     
