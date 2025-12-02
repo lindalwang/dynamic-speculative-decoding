@@ -1,7 +1,6 @@
 import torch
 from torch.nn import Module
 from utils.sampling_strategies import Sampler, GreedySampler
-from transformers.cache_utils import DynamicCache
 from utils.caching import prune_cache
 import utils.printing as printing
 from typing import List, Tuple

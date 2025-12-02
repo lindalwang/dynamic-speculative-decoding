@@ -1,4 +1,3 @@
-from math import inf
 import torch
 from torch.nn import Module
 from utils.logits_processor import LogitsProcessor, GreedyProcessor
