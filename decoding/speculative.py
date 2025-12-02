@@ -1,13 +1,13 @@
 import torch
 from torch.nn import Module
-from utils.logits_processor import LogitsProcessor, GreedyProcessor
+from utils.sampling_strategies import Sampler, GreedySampler
 from transformers.cache_utils import DynamicCache
 from utils.caching import prune_cache
 import utils.printing as printing
 from typing import List, Tuple
 
 @torch.no_grad()
-def speculative_generate(inputs: List[int], fast_drafter: Module, slow_target: Module, tokenizer = None, gamma: int = 5, logits_processor: LogitsProcessor = GreedyProcessor(), max_gen_len: int = 40, eos_tokens_id: int | List[int] = 1, pad_token_id: int = 0, use_cache: bool = False, skip_sample_adjustment: bool = False, first_target: bool = True) -> Tuple[List[int], float]:
+def speculative_generate(inputs: List[int], fast_drafter: Module, slow_target: Module, tokenizer = None, gamma: int = 5, logits_processor: Sampler = GreedySampler(), max_gen_len: int = 40, eos_tokens_id: int | List[int] = 1, pad_token_id: int = 0, use_cache: bool = False, skip_sample_adjustment: bool = False, first_target: bool = True) -> Tuple[List[int], float]:
     """
     Implementation of Speculative Decoding based on https://arxiv.org/pdf/2211.17192.pdf.
 

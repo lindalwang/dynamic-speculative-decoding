@@ -7,7 +7,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
 
-from sampling import autoregressive_generate, speculative_generate
+from decoding import autoregressive_generate, speculative_generate
 from utils.sampling_strategies import GreedySampler, MultinomialSampler, TopKSampler, NucleusSampler, TopKNucleusSampler
 from transformers import (
     AutoTokenizer,
