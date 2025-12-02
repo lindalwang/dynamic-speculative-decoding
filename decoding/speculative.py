@@ -6,7 +6,7 @@ import utils.printing as printing
 from typing import List, Tuple
 
 @torch.no_grad()
-def speculative_generate(inputs: List[int], fast_drafter: Module, slow_target: Module, tokenizer = None, gamma: int = 5, logits_processor: Sampler = GreedySampler(), max_gen_len: int = 40, eos_tokens_id: int | List[int] = 1, pad_token_id: int = 0, use_cache: bool = False, skip_sample_adjustment: bool = False, first_target: bool = True) -> Tuple[List[int], float]:
+def speculative_generate(inputs: List[int], fast_drafter: Module, slow_target: Module, tokenizer = None, gamma: int = 5, sampler: Sampler = GreedySampler(), max_gen_len: int = 40, eos_tokens_id: int | List[int] = 1, pad_token_id: int = 0, use_cache: bool = False, skip_sample_adjustment: bool = False, first_target: bool = True) -> Tuple[List[int], float]:
     """
     Implementation of Speculative Decoding based on https://arxiv.org/pdf/2211.17192.pdf.
 
@@ -53,8 +53,8 @@ def speculative_generate(inputs: List[int], fast_drafter: Module, slow_target: M
     if first_target:
         Mp = slow_target(input_ids=input_ids[..., :current_position], past_key_values=slow_target_cache, use_cache=use_cache)
         slow_target_cache = Mp.past_key_values
-        p_p = logits_processor(Mp.logits[..., -1, :])
-        t = logits_processor.sample(p_p)
+        p_p = sampler(Mp.logits[..., -1, :])
+        t = sampler.sample(p_p)
         input_ids[0, current_position] = t
         current_position += 1
         
@@ -86,13 +86,13 @@ def speculative_generate(inputs: List[int], fast_drafter: Module, slow_target: M
             draft_logits = Mq.logits[...,-1,:] 
             
             # process the logits using the specified logits processor
-            draft_probs = logits_processor(draft_logits)
+            draft_probs = sampler(draft_logits)
             
             # store the logits in q tensor
             q[0, k] = draft_probs.to(slow_target.device)
             
             # sample a token from the processed logits using the specified logits processor
-            xi = logits_processor.sample(draft_probs)
+            xi = sampler.sample(draft_probs)
 
             # update input ids
             input_ids[0, current_position + k] = xi
@@ -110,7 +110,7 @@ def speculative_generate(inputs: List[int], fast_drafter: Module, slow_target: M
         # update the slow target cache
         slow_target_cache = Mp.past_key_values
         draft_logits = Mp.logits[..., current_position - 1:current_position + corrected_gamma - 1, :] # [1, corrected_gamma, vocab_size]
-        p = logits_processor(draft_logits) # [1, gamma, vocab_size]
+        p = sampler(draft_logits) # [1, gamma, vocab_size]
         
         # perform rejection sampling to compute the last accepted draft position
         # initialize 'corrected_gamma' random numbers
@@ -138,7 +138,7 @@ def speculative_generate(inputs: List[int], fast_drafter: Module, slow_target: M
         # if n == gamma, we use the last token of Mp
         if n == corrected_gamma:
             p_p = Mp.logits[..., current_position + corrected_gamma - 1, :]
-            p_p = logits_processor(p_p)
+            p_p = sampler(p_p)
         # otherwise, we use the n-th token of Mp
         else:
             # prune the cache
@@ -157,7 +157,7 @@ def speculative_generate(inputs: List[int], fast_drafter: Module, slow_target: M
                 p_p = p[..., n, :]
 
         # sample a token from the processed logits using the specified logits processor
-        x = logits_processor.sample(p_p)
+        x = sampler.sample(p_p)
         
         # for debugging
         generated = input_ids.clone().detach()
