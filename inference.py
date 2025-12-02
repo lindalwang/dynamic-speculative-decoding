@@ -7,7 +7,8 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
 
-from decoding import autoregressive_generate, speculative_generate
+from decoding.baseline import autoregressive_generate
+from decoding.speculative import speculative_generate
 from utils.sampling_strategies import GreedySampler, MultinomialSampler, TopKSampler, NucleusSampler, TopKNucleusSampler
 from transformers import (
     AutoTokenizer,
@@ -370,7 +371,7 @@ def main():
     parser.add_argument(
         "--prompt",
         type=str,
-        default=None,
+        default="Translate to English: Je m'appelle Romain. N'hésitez pas à contribuer à mon projet!",
         help="Single prompt to run (non-interactive mode)"
     )
     args = parser.parse_args()
