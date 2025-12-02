@@ -123,10 +123,10 @@ class Config:
                 target_autoregressive=data['inference_modes'].get('target_autoregressive', True),
                 drafter_autoregressive=data['inference_modes'].get('drafter_autoregressive', False),
             ),
-            debug=DebugConfig(
-                enabled=data['debug'].get('enabled', False),
-                seed=data['debug'].get('seed', 42),
-            ),
+            # debug=DebugConfig(
+            #     enabled=data['debug'].get('enabled', False),
+            #     seed=data['debug'].get('seed', 42),
+            # ),
             device=data.get('device', 'cuda'),
         )
     
@@ -139,7 +139,7 @@ class Config:
             generation=GenerationConfig(),
             sampling=SamplingConfig(),
             inference_modes=InferenceModesConfig(),
-            debug=DebugConfig(),
+            # debug=DebugConfig(),
         )
 
 
@@ -254,7 +254,7 @@ class SpeculativeDecodingInference:
                 gamma=self.config.generation.gamma,
                 max_gen_len=self.config.generation.max_length,
                 eos_tokens_id=self.end_tokens,
-                debug=self.config.debug.enabled,
+                # debug=self.config.debug.enabled,
                 use_cache=self.config.generation.use_cache,
             )
             elapsed = time.time() - start_time
@@ -285,7 +285,7 @@ class SpeculativeDecodingInference:
                 max_gen_len=self.config.generation.max_length,
                 eos_tokens_id=self.end_tokens,
                 sampler=self.sampler,
-                debug=self.config.debug.enabled,
+                # debug=self.config.debug.enabled,
             )
             elapsed = time.time() - start_time
             output = self.tokenizer.decode(output_ids, skip_special_tokens=True)
@@ -313,7 +313,7 @@ class SpeculativeDecodingInference:
                 max_gen_len=self.config.generation.max_length,
                 eos_tokens_id=self.end_tokens,
                 sampler=self.sampler,
-                debug=self.config.debug.enabled,
+                # debug=self.config.debug.enabled,
             )
             elapsed = time.time() - start_time
             output = self.tokenizer.decode(output_ids, skip_special_tokens=True)
