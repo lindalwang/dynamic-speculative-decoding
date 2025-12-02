@@ -1,0 +1,39 @@
+# Speculative Decoding Base Configuration
+
+# Model Configuration
+models:
+  target:
+    name: "meta-llama/Llama-3.2-3B-Instruct"
+    quantization: "int8"  # Options: "int8", "int4", null (for no quantization)
+  drafter:
+    name: "meta-llama/Llama-3.2-1B-Instruct"
+    quantization: "int8"  # Options: "int8", "int4", null (for no quantization)
+
+# Generation Parameters
+generation:
+  gamma: 4                    # Number of draft tokens per speculation step
+  max_length: 35              # Maximum number of tokens to generate
+  use_cache: false            # Enable KV-cache (can be unstable with some models)
+  chat_mode: true             # Use chat template for instruct models
+
+# Sampling Strategy
+
+sampling:
+  processor: "greedy"         # Available processors: greedy, multinomial, topk, nucleus, topknucleus
+  temperature: 1.0
+  top_k: 50                   # For topk and topknucleus
+  top_p: 0.9                  # For nucleus and topknucleus
+
+# Inference Modes (which methods to run)
+inference_modes:
+  speculative: true           # Run speculative decoding
+  target_autoregressive: true # Run baseline target AR decoding
+  drafter_autoregressive: false # Run drafter AR decoding (for comparison)
+
+# Debug Settings
+debug:
+  enabled: false              # Show detailed step-by-step output
+  seed: 42                    # Random seed for reproducibility
+
+# Hardware
+device: "cuda"                # Options: "cuda", "cpu", "mps"
