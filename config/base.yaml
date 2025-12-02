@@ -4,22 +4,22 @@
 models:
   target:
     name: "meta-llama/Llama-3.2-3B-Instruct"
-    quantization: "int8"  # Options: "int8", "int4", null (for no quantization)
+    quantization: "int8"  # Options: "int8", "int4", null
   drafter:
     name: "meta-llama/Llama-3.2-1B-Instruct"
-    quantization: "int8"  # Options: "int8", "int4", null (for no quantization)
+    quantization: "int8"  # Options: "int8", "int4", null
 
 # Generation Parameters
 generation:
   gamma: 4                    # Number of draft tokens per speculation step
   max_length: 35              # Maximum number of tokens to generate
-  use_cache: false            # Enable KV-cache (can be unstable with some models)
-  chat_mode: true             # Use chat template for instruct models
+  use_cache: false            # Enable KV-cache (unstable)
+  chat_mode: true             
 
 # Sampling Strategy
 
 sampling:
-  sampler: "greedy"           # Available: greedy, multinomial, topk, nucleus, topknucleus
+  sampler: "greedy"           # Options: greedy, multinomial, topk, nucleus, topknucleus
   temperature: 1.0
   top_k: 50                   # For topk and topknucleus
   top_p: 0.9                  # For nucleus and topknucleus
