@@ -1,6 +1,6 @@
 import torch
 from torch.nn import Module
-from utils.logits_processor import LogitsProcessor, GreedyProcessor
+from utils.sampling_strategies import Sampler, GreedySampler
 import utils.printing as printing
 from typing import List
 
@@ -13,7 +13,7 @@ def _length_penalty_fn(length, alpha, min_length):
     return ((min_length + length) / (min_length + 1)) ** alpha
 
 @torch.no_grad()
-def autoregressive_generate(inputs: List[int], model: Module, max_gen_len: int = 40, logits_processor: LogitsProcessor = GreedyProcessor(), eos_tokens_id: int | List[int] = 1, pad_token_id: int = 0, use_cache: bool = False) -> List[int]:
+def autoregressive_generate(inputs: List[int], model: Module, max_gen_len: int = 40, sampler: Sampler = GreedySampler(), eos_tokens_id: int | List[int] = 1, pad_token_id: int = 0, use_cache: bool = False) -> List[int]:
     """
     Autoregressive decoding algorithm for baseline comparison.
 
@@ -51,8 +51,8 @@ def autoregressive_generate(inputs: List[int], model: Module, max_gen_len: int =
         # get logits
         logits = output.logits[..., -1, :]  # [1, vocab_size]
         # process and sample logits using the specified logits processor
-        probs = logits_processor(logits)  # [1, vocab_size]
-        x = logits_processor.sample(probs)  # [1, 1]
+        probs = sampler(logits)  # [1, vocab_size]
+        x = sampler.sample(probs)  # [1, 1]
         # update input ids
         input_ids[0, curr] = x
         # update cache
