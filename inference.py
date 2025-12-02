@@ -250,7 +250,7 @@ class SpeculativeDecodingInference:
                 self.drafter,
                 self.target,
                 tokenizer=self.tokenizer,
-                logits_processor=self.sampler,
+                sampler=self.sampler,
                 gamma=self.config.generation.gamma,
                 max_gen_len=self.config.generation.max_length,
                 eos_tokens_id=self.end_tokens,
@@ -284,7 +284,7 @@ class SpeculativeDecodingInference:
                 use_cache=self.config.generation.use_cache,
                 max_gen_len=self.config.generation.max_length,
                 eos_tokens_id=self.end_tokens,
-                logits_processor=self.sampler,
+                sampler=self.sampler,
                 debug=self.config.debug.enabled,
             )
             elapsed = time.time() - start_time
@@ -312,7 +312,7 @@ class SpeculativeDecodingInference:
                 use_cache=self.config.generation.use_cache,
                 max_gen_len=self.config.generation.max_length,
                 eos_tokens_id=self.end_tokens,
-                logits_processor=self.sampler,
+                sampler=self.sampler,
                 debug=self.config.debug.enabled,
             )
             elapsed = time.time() - start_time
