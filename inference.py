@@ -7,7 +7,12 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
 
+<<<<<<< HEAD
 from decoding import autoregressive_generate, speculative_generate, dynamic_speculative_generate, DynamicGammaScheduler
+=======
+from decoding.baseline import autoregressive_generate
+from decoding.speculative import speculative_generate
+>>>>>>> e22e323ca2c796316ab02205955e9715329925fd
 from utils.sampling_strategies import GreedySampler, MultinomialSampler, TopKSampler, NucleusSampler, TopKNucleusSampler
 from transformers import (
     AutoTokenizer,
@@ -158,7 +163,7 @@ class Config:
             dynamic_gamma=DynamicGammaConfig(),
             sampling=SamplingConfig(),
             inference_modes=InferenceModesConfig(),
-            debug=DebugConfig(),
+            # debug=DebugConfig(),
         )
 
 
@@ -274,6 +279,7 @@ class SpeculativeDecodingInference:
         if self.config.inference_modes.speculative:
             self._set_seed(self.config.debug.seed)
             start_time = time.time()
+<<<<<<< HEAD
             
             if self.config.dynamic_gamma.enabled:
                 # Dynamic speculative decoding
@@ -311,6 +317,20 @@ class SpeculativeDecodingInference:
                 )
                 gamma_stats = None
             
+=======
+            output_ids, accept_rate = speculative_generate(
+                tokenized,
+                self.drafter,
+                self.target,
+                tokenizer=self.tokenizer,
+                sampler=self.sampler,
+                gamma=self.config.generation.gamma,
+                max_gen_len=self.config.generation.max_length,
+                eos_tokens_id=self.end_tokens,
+                # debug=self.config.debug.enabled,
+                use_cache=self.config.generation.use_cache,
+            )
+>>>>>>> e22e323ca2c796316ab02205955e9715329925fd
             elapsed = time.time() - start_time
             output = self.tokenizer.decode(output_ids, skip_special_tokens=True)
             throughput = len(output_ids) / elapsed
@@ -342,8 +362,8 @@ class SpeculativeDecodingInference:
                 use_cache=self.config.generation.use_cache,
                 max_gen_len=self.config.generation.max_length,
                 eos_tokens_id=self.end_tokens,
-                logits_processor=self.sampler,
-                debug=self.config.debug.enabled,
+                sampler=self.sampler,
+                # debug=self.config.debug.enabled,
             )
             elapsed = time.time() - start_time
             output = self.tokenizer.decode(output_ids, skip_special_tokens=True)
@@ -370,8 +390,8 @@ class SpeculativeDecodingInference:
                 use_cache=self.config.generation.use_cache,
                 max_gen_len=self.config.generation.max_length,
                 eos_tokens_id=self.end_tokens,
-                logits_processor=self.sampler,
-                debug=self.config.debug.enabled,
+                sampler=self.sampler,
+                # debug=self.config.debug.enabled,
             )
             elapsed = time.time() - start_time
             output = self.tokenizer.decode(output_ids, skip_special_tokens=True)
@@ -429,7 +449,7 @@ def main():
     parser.add_argument(
         "--prompt",
         type=str,
-        default=None,
+        default="Translate to English: Je m'appelle Romain. N'hésitez pas à contribuer à mon projet!",
         help="Single prompt to run (non-interactive mode)"
     )
     args = parser.parse_args()
