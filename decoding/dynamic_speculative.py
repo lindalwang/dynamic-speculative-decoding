@@ -1,7 +1,11 @@
 """
-Static Speculative Decoding.
+Dynamic Speculative Decoding with adaptive gamma scheduling.
 
-Based on: https://arxiv.org/pdf/2211.17192.pdf
+Gamma (number of draft tokens) adjusts based on acceptance rate:
+- All drafts accepted → increase gamma (drafter is doing well)
+- Some rejected → decrease gamma (be more conservative)
+
+Based on HuggingFace's AssistedCandidateGenerator heuristic.
 """
 
 import torch
@@ -9,16 +13,94 @@ from torch.nn import Module
 from utils.sampling_strategies import Sampler, GreedySampler
 from utils.caching import prune_cache
 import utils.printing as printing
-from typing import List, Tuple
+from typing import List, Tuple, Optional
+from dataclasses import dataclass, field
+
+
+@dataclass
+class DynamicGammaScheduler:
+    """
+    Dynamically adjusts gamma based on acceptance rate.
+    
+    Args:
+        initial_gamma: Starting value for gamma.
+        min_gamma: Minimum allowed gamma.
+        max_gamma: Maximum allowed gamma.
+        schedule: "heuristic" for dynamic, "constant" for static.
+    """
+    initial_gamma: int = 4
+    min_gamma: int = 1
+    max_gamma: int = 10
+    schedule: str = "heuristic"
+    
+    # Internal state (initialized in __post_init__)
+    gamma: int = field(init=False)
+    _history: List[Tuple[int, int]] = field(init=False)
+    
+    def __post_init__(self):
+        self.gamma = self.initial_gamma
+        self._history = []
+    
+    def update(self, num_accepted: int, num_speculated: int) -> None:
+        """
+        Update gamma based on acceptance.
+        
+        Args:
+            num_accepted: Number of drafts accepted (n).
+            num_speculated: Number of drafts generated (gamma used).
+        """
+        self._history.append((num_accepted, num_speculated))
+        
+        if self.schedule == "constant":
+            return
+        
+        # Heuristic schedule
+        if num_accepted == num_speculated:
+            # All accepted → increase gamma
+            self.gamma = min(self.gamma + 2, self.max_gamma)
+        else:
+            # Some rejected → decrease gamma
+            self.gamma = max(self.min_gamma, num_accepted + 1)
+    
+    def get_gamma(self) -> int:
+        """Get current gamma value."""
+        return self.gamma
+    
+    def reset(self) -> None:
+        """Reset to initial state."""
+        self.gamma = self.initial_gamma
+        self._history = []
+    
+    def get_stats(self) -> dict:
+        """Get statistics about gamma adjustments."""
+        if not self._history:
+            return {
+                "avg_acceptance_rate": 0.0,
+                "total_accepted": 0,
+                "total_speculated": 0,
+                "num_steps": 0,
+                "final_gamma": self.gamma,
+            }
+        
+        total_accepted = sum(h[0] for h in self._history)
+        total_speculated = sum(h[1] for h in self._history)
+        
+        return {
+            "avg_acceptance_rate": total_accepted / total_speculated if total_speculated > 0 else 0.0,
+            "total_accepted": total_accepted,
+            "total_speculated": total_speculated,
+            "num_steps": len(self._history),
+            "final_gamma": self.gamma,
+        }
 
 
 @torch.no_grad()
-def speculative_generate(
+def dynamic_speculative_generate(
     inputs: List[int],
     drafter: Module,
     target: Module,
+    scheduler: DynamicGammaScheduler,
     tokenizer=None,
-    gamma: int = 5,
     logits_processor: Sampler = GreedySampler(),
     max_gen_len: int = 40,
     eos_tokens_id: int | List[int] = 1,
@@ -27,16 +109,16 @@ def speculative_generate(
     skip_sample_adjustment: bool = False,
     first_target: bool = True,
     debug: bool = False,
-) -> Tuple[List[int], float]:
+) -> Tuple[List[int], float, dict]:
     """
-    Static Speculative Decoding with fixed gamma.
+    Speculative Decoding with dynamic gamma adjustment.
     
     Args:
         inputs: Input token IDs.
         drafter: Smaller/faster draft model.
         target: Larger/slower target model.
+        scheduler: DynamicGammaScheduler for adaptive gamma.
         tokenizer: Tokenizer for debug output.
-        gamma: Number of draft tokens per step (fixed).
         logits_processor: Sampling strategy.
         max_gen_len: Maximum tokens to generate.
         eos_tokens_id: End-of-sequence token ID(s).
@@ -47,18 +129,16 @@ def speculative_generate(
         debug: Print debug information.
     
     Returns:
-        Tuple of (generated_tokens, acceptance_rate).
+        Tuple of (generated_tokens, acceptance_rate, scheduler_stats).
     """
+    scheduler.reset()
+    
     # Initialize caches
     drafter_cache, target_cache = None, None
 
     # Prepare stop tokens
     list_tokens_id = eos_tokens_id if isinstance(eos_tokens_id, list) else [eos_tokens_id]
     stop_tokens = torch.tensor(list_tokens_id, dtype=torch.long, device=target.device).unsqueeze(1)
-    
-    # Counters
-    drafts_accepted = 0
-    drafts_speculated = 0
     
     # Get vocabulary size and sequence limits
     vocabulary_size = target.config.vocab_size
@@ -79,7 +159,7 @@ def speculative_generate(
     
     current_position = prompt_len
     
-    # Initial target forward pass
+    # Prefill cache
     if first_target:
         Mp = target(
             input_ids=input_ids[..., :current_position],
@@ -95,22 +175,21 @@ def speculative_generate(
         if torch.isin(t, stop_tokens):
             if debug:
                 printing.end_token_found(0)
-            return input_ids[0, prompt_len:current_position].tolist(), 0.0
+            return input_ids[0, prompt_len:current_position].tolist(), 0.0, scheduler.get_stats()
         
         if debug:
             printing.initial_step(t, tokenizer)
     
     # Main loop
     while current_position < total_len:
+        # Get current gamma from scheduler
+        gamma = scheduler.get_gamma()
         corrected_gamma = min(gamma, total_len - current_position - 1)
         
         if corrected_gamma <= 0:
             break
 
-        # Store draft probabilities
         q = torch.zeros((1, corrected_gamma, vocabulary_size), device=target.device)
-        
-        # Generate drafts
         input_ids = input_ids.to(drafter.device)
         
         for k in range(corrected_gamma):
@@ -125,8 +204,6 @@ def speculative_generate(
             q[0, k] = draft_probs.to(target.device)
             xi = logits_processor.sample(draft_probs)
             input_ids[0, current_position + k] = xi
-        
-        drafts_speculated += corrected_gamma
         
         # Verify with target
         input_ids = input_ids.to(target.device)
@@ -149,16 +226,19 @@ def speculative_generate(
                 n = i
                 break
         
-        drafts_accepted += n
+        scheduler.update(num_accepted=n, num_speculated=corrected_gamma)
         
-        # Check for stop token
+        if debug:
+            print(f"  γ={corrected_gamma}, accepted={n}, new_γ={scheduler.get_gamma()}")
+        
+        # Check for stop token in accepted drafts
         stop_locations = torch.nonzero(torch.eq(input_ids[..., current_position:current_position + n], stop_tokens))
         if stop_locations.shape[0] > 0:
             stop_location = stop_locations[0, 1].item()
             if debug:
                 printing.end_token_found(stop_location)
-            accept_rate = drafts_accepted / drafts_speculated if drafts_speculated > 0 else 0
-            return input_ids[0, prompt_len:current_position + stop_location + 1].tolist(), accept_rate
+            stats = scheduler.get_stats()
+            return input_ids[0, prompt_len:current_position + stop_location + 1].tolist(), stats["avg_acceptance_rate"], stats
 
         # Sample next token
         if n == corrected_gamma:
@@ -193,8 +273,9 @@ def speculative_generate(
         if torch.isin(x, stop_tokens):
             if debug:
                 printing.end_token_found(n)
-            accept_rate = drafts_accepted / drafts_speculated if drafts_speculated > 0 else 0
-            return input_ids[0, prompt_len:current_position].tolist(), accept_rate
+            stats = scheduler.get_stats()
+            return input_ids[0, prompt_len:current_position].tolist(), stats["avg_acceptance_rate"], stats
     
-    accept_rate = drafts_accepted / drafts_speculated if drafts_speculated > 0 else 0
-    return input_ids[0, prompt_len:].tolist(), accept_rate
+    stats = scheduler.get_stats()
+    return input_ids[0, prompt_len:].tolist(), stats["avg_acceptance_rate"], stats
+

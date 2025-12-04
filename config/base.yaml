@@ -11,13 +11,19 @@ models:
 
 # Generation Parameters
 generation:
-  gamma: 4                    # Number of draft tokens per speculation step
-  max_length: 35              # Maximum number of tokens to generate
-  use_cache: false            # Enable KV-cache (unstable)
+  gamma: 4                    # Draft tokens per step
+  max_length: 35              # Maximum tokens to generate
+  use_cache: false            # Enable KV-cache
   chat_mode: true             
 
-# Sampling Strategy
+# Dynamic Gamma Scheduling
+dynamic_gamma:
+  enabled: true               # Enable dynamic gamma adjustment
+  schedule: "heuristic"       # "heuristic" (adaptive) or "constant" (static)
+  min_gamma: 1                # Minimum gamma
+  max_gamma: 10               # Maximum gamma
 
+# Sampling Strategy
 sampling:
   sampler: "greedy"           # Options: greedy, multinomial, topk, nucleus, topknucleus
   temperature: 1.0
@@ -28,7 +34,7 @@ sampling:
 inference_modes:
   speculative: true           # Run speculative decoding
   target_autoregressive: true # Run baseline target AR decoding
-  drafter_autoregressive: false # Run drafter AR decoding (for comparison)
+  drafter_autoregressive: false # Run drafter AR decoding
 
 # Debug Settings
 debug:

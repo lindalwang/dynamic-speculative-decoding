@@ -1,3 +1,3 @@
 from .speculative import speculative_generate
-#from .autoregressive import autoregressive_generate
-
+from .dynamic_speculative import dynamic_speculative_generate, DynamicGammaScheduler
+from .autoregressive import autoregressive_generate

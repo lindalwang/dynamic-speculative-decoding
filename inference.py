@@ -7,7 +7,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
 
-from decoding import autoregressive_generate, speculative_generate
+from decoding import autoregressive_generate, speculative_generate, dynamic_speculative_generate, DynamicGammaScheduler
 from utils.sampling_strategies import GreedySampler, MultinomialSampler, TopKSampler, NucleusSampler, TopKNucleusSampler
 from transformers import (
     AutoTokenizer,
@@ -38,6 +38,15 @@ class GenerationConfig:
     max_length: int = 35
     use_cache: bool = False
     chat_mode: bool = True
+
+
+@dataclass
+class DynamicGammaConfig:
+    """Configuration for dynamic gamma scheduling."""
+    enabled: bool = True
+    schedule: str = "heuristic"  # "heuristic" or "constant"
+    min_gamma: int = 1
+    max_gamma: int = 10
 
 
 @dataclass 
@@ -85,6 +94,7 @@ class Config:
     target_model: ModelConfig
     drafter_model: ModelConfig
     generation: GenerationConfig
+    dynamic_gamma: DynamicGammaConfig
     sampling: SamplingConfig
     inference_modes: InferenceModesConfig
     debug: DebugConfig
@@ -95,6 +105,9 @@ class Config:
         """Load configuration from a YAML file."""
         with open(path, 'r') as f:
             data = yaml.safe_load(f)
+        
+        # Handle dynamic_gamma config (with defaults for backward compatibility)
+        dynamic_gamma_data = data.get('dynamic_gamma', {})
         
         return cls(
             target_model=ModelConfig(
@@ -110,6 +123,12 @@ class Config:
                 max_length=data['generation'].get('max_length', 35),
                 use_cache=data['generation'].get('use_cache', False),
                 chat_mode=data['generation'].get('chat_mode', True),
+            ),
+            dynamic_gamma=DynamicGammaConfig(
+                enabled=dynamic_gamma_data.get('enabled', False),
+                schedule=dynamic_gamma_data.get('schedule', 'heuristic'),
+                min_gamma=dynamic_gamma_data.get('min_gamma', 1),
+                max_gamma=dynamic_gamma_data.get('max_gamma', 10),
             ),
             sampling=SamplingConfig(
                 sampler=data['sampling'].get('sampler', 'greedy'),
@@ -136,6 +155,7 @@ class Config:
             target_model=ModelConfig(name="meta-llama/Llama-3.2-3B-Instruct", quantization="int8"),
             drafter_model=ModelConfig(name="meta-llama/Llama-3.2-1B-Instruct", quantization="int8"),
             generation=GenerationConfig(),
+            dynamic_gamma=DynamicGammaConfig(),
             sampling=SamplingConfig(),
             inference_modes=InferenceModesConfig(),
             debug=DebugConfig(),
@@ -203,6 +223,16 @@ class SpeculativeDecodingInference:
         print(f"  Sampler: {self.config.sampling.sampler} (T={self.config.sampling.temperature})")
         print(f"  Cache: {self.config.generation.use_cache}")
         print(f"  Chat mode: {self.config.generation.chat_mode}")
+        
+        # Dynamic gamma settings
+        dg = self.config.dynamic_gamma
+        if dg.enabled:
+            print(colored("  Dynamic Gamma:", "yellow"), "enabled")
+            print(f"    Schedule: {dg.schedule}")
+            print(f"    Range: [{dg.min_gamma}, {dg.max_gamma}]")
+        else:
+            print(colored("  Dynamic Gamma:", "yellow"), "disabled (static)")
+        
         print(colored("  Inference modes:", "cyan"))
         print(f"    Speculative: {self.config.inference_modes.speculative}")
         print(f"    Target AR: {self.config.inference_modes.target_autoregressive}")
@@ -244,18 +274,43 @@ class SpeculativeDecodingInference:
         if self.config.inference_modes.speculative:
             self._set_seed(self.config.debug.seed)
             start_time = time.time()
-            output_ids, accept_rate = speculative_generate(
-                tokenized,
-                self.drafter,
-                self.target,
-                tokenizer=self.tokenizer,
-                logits_processor=self.sampler,
-                gamma=self.config.generation.gamma,
-                max_gen_len=self.config.generation.max_length,
-                eos_tokens_id=self.end_tokens,
-                debug=self.config.debug.enabled,
-                use_cache=self.config.generation.use_cache,
-            )
+            
+            if self.config.dynamic_gamma.enabled:
+                # Dynamic speculative decoding
+                scheduler = DynamicGammaScheduler(
+                    initial_gamma=self.config.generation.gamma,
+                    min_gamma=self.config.dynamic_gamma.min_gamma,
+                    max_gamma=self.config.dynamic_gamma.max_gamma,
+                    schedule=self.config.dynamic_gamma.schedule,
+                )
+                output_ids, accept_rate, gamma_stats = dynamic_speculative_generate(
+                    tokenized,
+                    self.drafter,
+                    self.target,
+                    scheduler=scheduler,
+                    tokenizer=self.tokenizer,
+                    logits_processor=self.sampler,
+                    max_gen_len=self.config.generation.max_length,
+                    eos_tokens_id=self.end_tokens,
+                    debug=self.config.debug.enabled,
+                    use_cache=self.config.generation.use_cache,
+                )
+            else:
+                # Static speculative decoding
+                output_ids, accept_rate = speculative_generate(
+                    tokenized,
+                    self.drafter,
+                    self.target,
+                    tokenizer=self.tokenizer,
+                    logits_processor=self.sampler,
+                    gamma=self.config.generation.gamma,
+                    max_gen_len=self.config.generation.max_length,
+                    eos_tokens_id=self.end_tokens,
+                    debug=self.config.debug.enabled,
+                    use_cache=self.config.generation.use_cache,
+                )
+                gamma_stats = None
+            
             elapsed = time.time() - start_time
             output = self.tokenizer.decode(output_ids, skip_special_tokens=True)
             throughput = len(output_ids) / elapsed
@@ -265,13 +320,17 @@ class SpeculativeDecodingInference:
                 'accept_rate': accept_rate,
                 'throughput': throughput,
                 'time': elapsed,
+                'gamma_stats': gamma_stats,
             }
             
-            print(colored("========== Speculative ==========", "green"))
+            mode_name = "Dynamic Speculative" if self.config.dynamic_gamma.enabled else "Speculative"
+            print(colored(f"========== {mode_name} ==========", "green"))
             print(colored("Out:", "green"), output)
             print(colored(f"Acceptance rate: {accept_rate:.3f}", "green"))
             print(colored(f"Throughput: {throughput:.1f} tokens/s", "green"))
-            print(colored("========== Speculative ==========", "green"))
+            if gamma_stats:
+                print(colored(f"Final gamma: {gamma_stats['final_gamma']}", "green"))
+            print(colored(f"========== {mode_name} ==========", "green"))
 
         # Target Autoregressive (Baseline)
         if self.config.inference_modes.target_autoregressive:
