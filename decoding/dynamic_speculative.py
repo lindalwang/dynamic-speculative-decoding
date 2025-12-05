@@ -101,7 +101,7 @@ def dynamic_speculative_generate(
     target: Module,
     scheduler: DynamicGammaScheduler,
     tokenizer=None,
-    logits_processor: Sampler = GreedySampler(),
+    sampler: Sampler = GreedySampler(),
     max_gen_len: int = 40,
     eos_tokens_id: Union[int, List[int]] = 1,
     pad_token_id: int = 0,
@@ -119,7 +119,7 @@ def dynamic_speculative_generate(
         target: Larger/slower target model.
         scheduler: DynamicGammaScheduler for adaptive gamma.
         tokenizer: Tokenizer for debug output.
-        logits_processor: Sampling strategy.
+        sampler: Sampling strategy.
         max_gen_len: Maximum tokens to generate.
         eos_tokens_id: End-of-sequence token ID(s).
         pad_token_id: Padding token ID.
@@ -167,8 +167,8 @@ def dynamic_speculative_generate(
             use_cache=use_cache
         )
         target_cache = Mp.past_key_values
-        p_p = logits_processor(Mp.logits[..., -1, :])
-        t = logits_processor.sample(p_p)
+        p_p = sampler(Mp.logits[..., -1, :])
+        t = sampler.sample(p_p)
         input_ids[0, current_position] = t
         current_position += 1
         
@@ -200,9 +200,9 @@ def dynamic_speculative_generate(
             )
             drafter_cache = Mq.past_key_values
             draft_logits = Mq.logits[..., -1, :]
-            draft_probs = logits_processor(draft_logits)
+            draft_probs = sampler(draft_logits)
             q[0, k] = draft_probs.to(target.device)
-            xi = logits_processor.sample(draft_probs)
+            xi = sampler.sample(draft_probs)
             input_ids[0, current_position + k] = xi
         
         # Verify with target
@@ -215,7 +215,7 @@ def dynamic_speculative_generate(
         )
         target_cache = Mp.past_key_values
         draft_logits = Mp.logits[..., current_position - 1:current_position + corrected_gamma - 1, :]
-        p = logits_processor(draft_logits)
+        p = sampler(draft_logits)
         
         # Rejection sampling
         r = torch.rand(corrected_gamma, device=target.device)
@@ -243,7 +243,7 @@ def dynamic_speculative_generate(
         # Sample next token
         if n == corrected_gamma:
             p_p = Mp.logits[..., current_position + corrected_gamma - 1, :]
-            p_p = logits_processor(p_p)
+            p_p = sampler(p_p)
         else:
             if use_cache:
                 drafter_cache = prune_cache(drafter_cache, corrected_gamma - n)
@@ -257,7 +257,7 @@ def dynamic_speculative_generate(
             else:
                 p_p = p[..., n, :]
 
-        x = logits_processor.sample(p_p)
+        x = sampler.sample(p_p)
         
         if debug:
             generated = input_ids.clone().detach()

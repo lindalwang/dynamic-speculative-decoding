@@ -23,7 +23,7 @@ def speculative_generate(inputs: List[int], fast_drafter: Module, slow_target: M
         target: Larger/slower target model.
         tokenizer: Tokenizer for debug output.
         gamma: Number of draft tokens per step (fixed).
-        logits_processor: Sampling strategy.
+        sampler: Sampling strategy.
         max_gen_len: Maximum tokens to generate.
         eos_tokens_id: End-of-sequence token ID(s).
         pad_token_id: Padding token ID.
@@ -134,7 +134,7 @@ def speculative_generate(inputs: List[int], fast_drafter: Module, slow_target: M
         )
         target_cache = Mp.past_key_values
         draft_logits = Mp.logits[..., current_position - 1:current_position + corrected_gamma - 1, :]
-        p = logits_processor(draft_logits)
+        p = sampler(draft_logits)
         
         # Rejection sampling
         r = torch.rand(corrected_gamma, device=target.device)

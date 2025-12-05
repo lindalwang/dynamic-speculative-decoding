@@ -178,7 +178,7 @@ class Benchmark:
             self.drafter,
             self.target,
             gamma=self.config.gamma,
-            logits_processor=self.sampler,
+            sampler=self.sampler,
             max_gen_len=max_len,
             eos_tokens_id=self.end_tokens,
             use_cache=False,
@@ -211,7 +211,7 @@ class Benchmark:
             self.drafter,
             self.target,
             scheduler=scheduler,
-            logits_processor=self.sampler,
+            sampler=self.sampler,
             max_gen_len=max_len,
             eos_tokens_id=self.end_tokens,
             use_cache=False,
@@ -404,7 +404,7 @@ def main():
     
     # Quick mode uses subset
     if args.quick:
-        categories = ["short_qa", "translation"]
+        categories = ["medium_qa", "translation"]
         lengths = [25, 50]
     else:
         categories = args.categories
