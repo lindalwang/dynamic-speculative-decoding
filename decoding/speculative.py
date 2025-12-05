@@ -13,25 +13,7 @@ from typing import List, Tuple
 
 
 @torch.no_grad()
-<<<<<<< HEAD
-def speculative_generate(
-    inputs: List[int],
-    drafter: Module,
-    target: Module,
-    tokenizer=None,
-    gamma: int = 5,
-    logits_processor: Sampler = GreedySampler(),
-    max_gen_len: int = 40,
-    eos_tokens_id: int | List[int] = 1,
-    pad_token_id: int = 0,
-    use_cache: bool = False,
-    skip_sample_adjustment: bool = False,
-    first_target: bool = True,
-    debug: bool = False,
-) -> Tuple[List[int], float]:
-=======
 def speculative_generate(inputs: List[int], fast_drafter: Module, slow_target: Module, tokenizer = None, gamma: int = 5, sampler: Sampler = GreedySampler(), max_gen_len: int = 40, eos_tokens_id: int | List[int] = 1, pad_token_id: int = 0, use_cache: bool = False, skip_sample_adjustment: bool = False, first_target: bool = True) -> Tuple[List[int], float]:
->>>>>>> e22e323ca2c796316ab02205955e9715329925fd
     """
     Static Speculative Decoding with fixed gamma.
     
@@ -85,21 +67,10 @@ def speculative_generate(inputs: List[int], fast_drafter: Module, slow_target: M
     
     # Initial target forward pass
     if first_target:
-<<<<<<< HEAD
-        Mp = target(
-            input_ids=input_ids[..., :current_position],
-            past_key_values=target_cache,
-            use_cache=use_cache
-        )
-        target_cache = Mp.past_key_values
-        p_p = logits_processor(Mp.logits[..., -1, :])
-        t = logits_processor.sample(p_p)
-=======
         Mp = slow_target(input_ids=input_ids[..., :current_position], past_key_values=slow_target_cache, use_cache=use_cache)
         slow_target_cache = Mp.past_key_values
         p_p = sampler(Mp.logits[..., -1, :])
         t = sampler.sample(p_p)
->>>>>>> e22e323ca2c796316ab02205955e9715329925fd
         input_ids[0, current_position] = t
         current_position += 1
         
@@ -125,18 +96,6 @@ def speculative_generate(inputs: List[int], fast_drafter: Module, slow_target: M
         input_ids = input_ids.to(drafter.device)
         
         for k in range(corrected_gamma):
-<<<<<<< HEAD
-            Mq = drafter(
-                input_ids=input_ids[..., :current_position + k],
-                past_key_values=drafter_cache,
-                use_cache=use_cache
-            )
-            drafter_cache = Mq.past_key_values
-            draft_logits = Mq.logits[..., -1, :]
-            draft_probs = logits_processor(draft_logits)
-            q[0, k] = draft_probs.to(target.device)
-            xi = logits_processor.sample(draft_probs)
-=======
             # run fast drafter on the input ids
             Mq = fast_drafter(input_ids=input_ids[..., :current_position+k], past_key_values=fast_drafter_cache, use_cache=use_cache)
             # update the fast drafter cache
@@ -155,15 +114,10 @@ def speculative_generate(inputs: List[int], fast_drafter: Module, slow_target: M
             xi = sampler.sample(draft_probs)
 
             # update input ids
->>>>>>> e22e323ca2c796316ab02205955e9715329925fd
             input_ids[0, current_position + k] = xi
         
         drafts_speculated += corrected_gamma
         
-<<<<<<< HEAD
-        # Verify with target
-        input_ids = input_ids.to(target.device)
-=======
         # run target model on the draft tokens
         # result = logits of the previous tokens + one more token
         Mp = slow_target(input_ids=input_ids[..., :current_position + corrected_gamma], past_key_values=slow_target_cache, use_cache=use_cache)
@@ -172,7 +126,6 @@ def speculative_generate(inputs: List[int], fast_drafter: Module, slow_target: M
         slow_target_cache = Mp.past_key_values
         draft_logits = Mp.logits[..., current_position - 1:current_position + corrected_gamma - 1, :] # [1, corrected_gamma, vocab_size]
         p = sampler(draft_logits) # [1, gamma, vocab_size]
->>>>>>> e22e323ca2c796316ab02205955e9715329925fd
         
         Mp = target(
             input_ids=input_ids[..., :current_position + corrected_gamma],
@@ -206,12 +159,8 @@ def speculative_generate(inputs: List[int], fast_drafter: Module, slow_target: M
         # Sample next token
         if n == corrected_gamma:
             p_p = Mp.logits[..., current_position + corrected_gamma - 1, :]
-<<<<<<< HEAD
-            p_p = logits_processor(p_p)
-=======
             p_p = sampler(p_p)
         # otherwise, we use the n-th token of Mp
->>>>>>> e22e323ca2c796316ab02205955e9715329925fd
         else:
             if use_cache:
                 drafter_cache = prune_cache(drafter_cache, corrected_gamma - n)
@@ -225,12 +174,8 @@ def speculative_generate(inputs: List[int], fast_drafter: Module, slow_target: M
             else:
                 p_p = p[..., n, :]
 
-<<<<<<< HEAD
-        x = logits_processor.sample(p_p)
-=======
         # sample a token from the processed logits using the specified logits processor
         x = sampler.sample(p_p)
->>>>>>> e22e323ca2c796316ab02205955e9715329925fd
         
         if debug:
             generated = input_ids.clone().detach()
