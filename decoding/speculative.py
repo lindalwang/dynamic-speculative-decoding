@@ -67,8 +67,8 @@ def speculative_generate(inputs: List[int], drafter: Module, target: Module, tok
     
     # Initial target forward pass
     if first_target:
-        Mp = slow_target(input_ids=input_ids[..., :current_position], past_key_values=slow_target_cache, use_cache=use_cache)
-        slow_target_cache = Mp.past_key_values
+        Mp = target(input_ids=input_ids[..., :current_position], past_key_values=target_cache, use_cache=use_cache)
+        target_cache = Mp.past_key_values
         p_p = sampler(Mp.logits[..., -1, :])
         t = sampler.sample(p_p)
         input_ids[0, current_position] = t
@@ -97,9 +97,9 @@ def speculative_generate(inputs: List[int], drafter: Module, target: Module, tok
         
         for k in range(corrected_gamma):
             # run fast drafter on the input ids
-            Mq = fast_drafter(input_ids=input_ids[..., :current_position+k], past_key_values=fast_drafter_cache, use_cache=use_cache)
+            Mq = drafter(input_ids=input_ids[..., :current_position+k], past_key_values=drafter_cache, use_cache=use_cache)
             # update the fast drafter cache
-            fast_drafter_cache = Mq.past_key_values
+            drafter_cache = Mq.past_key_values
             
             # get the logits of the last token
             draft_logits = Mq.logits[...,-1,:] 
@@ -108,7 +108,7 @@ def speculative_generate(inputs: List[int], drafter: Module, target: Module, tok
             draft_probs = sampler(draft_logits)
             
             # store the logits in q tensor
-            q[0, k] = draft_probs.to(slow_target.device)
+            q[0, k] = draft_probs.to(target.device)
             
             # sample a token from the processed logits using the specified logits processor
             xi = sampler.sample(draft_probs)
@@ -120,18 +120,9 @@ def speculative_generate(inputs: List[int], drafter: Module, target: Module, tok
         
         # run target model on the draft tokens
         # result = logits of the previous tokens + one more token
-        Mp = slow_target(input_ids=input_ids[..., :current_position + corrected_gamma], past_key_values=slow_target_cache, use_cache=use_cache)
+        Mp = target(input_ids=input_ids[..., :current_position + corrected_gamma], past_key_values=target_cache, use_cache=use_cache)
 
-        # update the slow target cache
-        slow_target_cache = Mp.past_key_values
-        draft_logits = Mp.logits[..., current_position - 1:current_position + corrected_gamma - 1, :] # [1, corrected_gamma, vocab_size]
-        p = sampler(draft_logits) # [1, gamma, vocab_size]
-        
-        Mp = target(
-            input_ids=input_ids[..., :current_position + corrected_gamma],
-            past_key_values=target_cache,
-            use_cache=use_cache
-        )
+        # update the target cache
         target_cache = Mp.past_key_values
         draft_logits = Mp.logits[..., current_position - 1:current_position + corrected_gamma - 1, :]
         p = sampler(draft_logits)
