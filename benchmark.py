@@ -153,7 +153,7 @@ class Benchmark:
             tokens,
             self.target,
             max_gen_len=max_len,
-            logits_processor=self.sampler,
+            sampler=self.sampler,
             eos_tokens_id=self.end_tokens,
             use_cache=False,
         )
