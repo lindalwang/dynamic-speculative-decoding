@@ -19,7 +19,10 @@ from datetime import datetime
 
 from decoding import speculative_generate, dynamic_speculative_generate, DynamicGammaScheduler
 from decoding.baseline import autoregressive_generate
-from utils.sampling_strategies import GreedySampler
+from utils.sampling_strategies import (
+    Sampler, GreedySampler, MultinomialSampler, 
+    TopKSampler, NucleusSampler, TopKNucleusSampler
+)
 from transformers import AutoTokenizer, AutoModelForCausalLM, QuantoConfig
 from termcolor import colored
 
@@ -74,6 +77,11 @@ class BenchmarkConfig:
     num_runs: int = 3  # Number of runs per prompt for averaging
     warmup_runs: int = 1
     seed: int = 42
+    # Sampling configuration
+    sampler_type: str = "greedy"  # Options: greedy, multinomial, topk, nucleus, topknucleus
+    temperature: float = 1.0
+    top_k: int = 50
+    top_p: float = 0.9
 
 
 class Benchmark:
@@ -88,7 +96,29 @@ class Benchmark:
         print(colored("=" * 60, "cyan"))
         
         self._load_models()
-        self.sampler = GreedySampler(temperature=1.0)
+        self.sampler = self._create_sampler()
+    
+    def _create_sampler(self) -> Sampler:
+        """Create sampler based on config."""
+        sampler_type = self.config.sampler_type.lower()
+        temp = self.config.temperature
+        
+        if sampler_type == "greedy":
+            sampler = GreedySampler(temperature=temp)
+        elif sampler_type == "multinomial":
+            sampler = MultinomialSampler(temperature=temp)
+        elif sampler_type == "topk":
+            sampler = TopKSampler(temperature=temp, top_k=self.config.top_k)
+        elif sampler_type == "nucleus":
+            sampler = NucleusSampler(temperature=temp, top_p=self.config.top_p)
+        elif sampler_type == "topknucleus":
+            sampler = TopKNucleusSampler(temperature=temp, top_k=self.config.top_k, top_p=self.config.top_p)
+        else:
+            print(colored(f"Unknown sampler '{sampler_type}', defaulting to greedy", "yellow"))
+            sampler = GreedySampler(temperature=temp)
+        
+        print(colored(f"  Sampler: {sampler_type} (temp={temp})", "green"))
+        return sampler
         
     def _load_models(self):
         """Load target and drafter models."""
@@ -389,6 +419,13 @@ def main():
     parser.add_argument("--lengths", nargs="+", type=int, default=None, help="Generation lengths to test")
     parser.add_argument("--output", type=str, default=None, help="Output CSV filename")
     parser.add_argument("--quick", action="store_true", help="Quick test with fewer prompts")
+    # Sampling arguments
+    parser.add_argument("--sampler", type=str, default="greedy", 
+                        choices=["greedy", "multinomial", "topk", "nucleus", "topknucleus"],
+                        help="Sampling strategy")
+    parser.add_argument("--temperature", type=float, default=1.0, help="Sampling temperature")
+    parser.add_argument("--top-k", type=int, default=50, help="Top-k for topk/topknucleus sampling")
+    parser.add_argument("--top-p", type=float, default=0.9, help="Top-p for nucleus/topknucleus sampling")
     args = parser.parse_args()
     
     config = BenchmarkConfig(
@@ -398,6 +435,10 @@ def main():
         device=args.device,
         gamma=args.gamma,
         num_runs=args.num_runs,
+        sampler_type=args.sampler,
+        temperature=args.temperature,
+        top_k=args.top_k,
+        top_p=args.top_p,
     )
     
     benchmark = Benchmark(config)
