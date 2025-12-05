@@ -13,7 +13,7 @@ from torch.nn import Module
 from utils.sampling_strategies import Sampler, GreedySampler
 from utils.caching import prune_cache
 import utils.printing as printing
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Union
 from dataclasses import dataclass, field
 
 
@@ -103,7 +103,7 @@ def dynamic_speculative_generate(
     tokenizer=None,
     logits_processor: Sampler = GreedySampler(),
     max_gen_len: int = 40,
-    eos_tokens_id: int | List[int] = 1,
+    eos_tokens_id: Union[int, List[int]] = 1,
     pad_token_id: int = 0,
     use_cache: bool = False,
     skip_sample_adjustment: bool = False,

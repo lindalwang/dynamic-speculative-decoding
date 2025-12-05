@@ -2,7 +2,7 @@ import torch
 from torch.nn import Module
 from utils.sampling_strategies import Sampler, GreedySampler
 import utils.printing as printing
-from typing import List
+from typing import List, Union
 
 # Baseline decoding algorithms for comparison
 
@@ -13,7 +13,7 @@ def _length_penalty_fn(length, alpha, min_length):
     return ((min_length + length) / (min_length + 1)) ** alpha
 
 @torch.no_grad()
-def autoregressive_generate(inputs: List[int], model: Module, max_gen_len: int = 40, sampler: Sampler = GreedySampler(), eos_tokens_id: int | List[int] = 1, pad_token_id: int = 0, use_cache: bool = False) -> List[int]:
+def autoregressive_generate(inputs: List[int], model: Module, max_gen_len: int = 40, sampler: Sampler = GreedySampler(), eos_tokens_id: Union[int, List[int]] = 1, pad_token_id: int = 0, use_cache: bool = False) -> List[int]:
     """
     Autoregressive decoding algorithm for baseline comparison.
 
@@ -68,7 +68,7 @@ def autoregressive_generate(inputs: List[int], model: Module, max_gen_len: int =
 
 
 @torch.no_grad()
-def beam_search_generate(inputs: List[int], model: Module, max_gen_len: int = 40, num_beams: int = 4, top_k: int = 3, min_length: float = 5.0, alpha: float = 1.2, eos_tokens_id: int | List[int] = 1, pad_token_id: int = 0, tokenizer=None) -> List[int]:
+def beam_search_generate(inputs: List[int], model: Module, max_gen_len: int = 40, num_beams: int = 4, top_k: int = 3, min_length: float = 5.0, alpha: float = 1.2, eos_tokens_id: Union[int, List[int]] = 1, pad_token_id: int = 0, tokenizer=None) -> List[int]:
     """
     Beam search decoding algorithm for baseline comparison.
 
