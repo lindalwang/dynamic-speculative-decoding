@@ -13,7 +13,7 @@ from typing import List, Tuple, Union
 
 
 @torch.no_grad()
-def speculative_generate(inputs: List[int], drafter: Module, target: Module, tokenizer = None, gamma: int = 5, sampler: Sampler = GreedySampler(), max_gen_len: int = 40, eos_tokens_id: Union[int, List[int]] = 1, pad_token_id: int = 0, use_cache: bool = False, skip_sample_adjustment: bool = False, first_target: bool = True) -> Tuple[List[int], float]:
+def speculative_generate(inputs: List[int], drafter: Module, target: Module, tokenizer = None, gamma: int = 5, sampler: Sampler = GreedySampler(), max_gen_len: int = 40, eos_tokens_id: Union[int, List[int]] = 1, pad_token_id: int = 0, use_cache: bool = False, skip_sample_adjustment: bool = False, first_target: bool = True, debug: bool = False) -> Tuple[List[int], float]:
     """
     Static Speculative Decoding with fixed gamma.
     
