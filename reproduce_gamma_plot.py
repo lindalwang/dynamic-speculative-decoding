@@ -13,15 +13,13 @@ def main():
     target_model_name = "meta-llama/Llama-3.2-3B-Instruct"
     drafter_model_name = "meta-llama/Llama-3.2-1B-Instruct"
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    quantization = None
+    quantization = "int8"
     
     print(f"Using device: {device}")
     
     # Load models
     print("Loading models...")
-    quant_config = None
-    if quantization:
-        quant_config = QuantoConfig(weights=quantization)
+    quant_config = QuantoConfig(weights=quantization)
     
     target = AutoModelForCausalLM.from_pretrained(
         target_model_name,
