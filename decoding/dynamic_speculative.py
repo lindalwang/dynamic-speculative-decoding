@@ -160,6 +160,10 @@ def dynamic_speculative_generate(
     
     current_position = prompt_len
     
+    # Cache length tracking (for correct logits indexing when use_cache=True)
+    target_cache_len = 0
+    drafter_cache_len = 0
+    
     # Prefill cache
     if first_target:
         Mp = target(
@@ -168,6 +172,8 @@ def dynamic_speculative_generate(
             use_cache=use_cache
         )
         target_cache = Mp.past_key_values
+        target_cache_len = current_position  # Cache now has prompt_len tokens
+        
         p_p = sampler(Mp.logits[..., -1, :])
         t = sampler.sample(p_p)
         input_ids[0, current_position] = t
@@ -200,6 +206,8 @@ def dynamic_speculative_generate(
                 use_cache=use_cache
             )
             drafter_cache = Mq.past_key_values
+            drafter_cache_len = current_position + k  # Update cache length
+            
             draft_logits = Mq.logits[..., -1, :]
             draft_probs = sampler(draft_logits)
             q[0, k] = draft_probs.to(target.device)
@@ -209,18 +217,26 @@ def dynamic_speculative_generate(
         # Verify with target
         input_ids = input_ids.to(target.device)
         
+        input_len = current_position + corrected_gamma
         Mp = target(
-            input_ids=input_ids[..., :current_position + corrected_gamma],
+            input_ids=input_ids[..., :input_len],
             past_key_values=target_cache,
             use_cache=use_cache
         )
         target_cache = Mp.past_key_values
         
+        # Calculate number of new tokens processed
+        num_new_tokens = input_len - target_cache_len
+        target_cache_len = input_len  # Update cache length
+        
         # Extract logits for draft token positions
-        # With cache: logits only has new positions, so slice from start
-        # Without cache: logits has all positions, slice at current_position - 1
+        # With cache: logits only has num_new_tokens entries
+        # Without cache: logits has all input_len entries
         if use_cache:
-            draft_logits = Mp.logits[..., :corrected_gamma, :]
+            # The first (num_new_tokens - corrected_gamma) logits are for tokens before drafts
+            # We want the last corrected_gamma logits for verification
+            offset = num_new_tokens - corrected_gamma - 1
+            draft_logits = Mp.logits[..., offset:offset + corrected_gamma, :]
         else:
             draft_logits = Mp.logits[..., current_position - 1:current_position + corrected_gamma - 1, :]
         p = sampler(draft_logits)
@@ -250,16 +266,21 @@ def dynamic_speculative_generate(
 
         # Sample next token
         if n == corrected_gamma:
-            # All drafts accepted, get bonus token from position after last draft
+            # All drafts accepted, get bonus token from last position
             if use_cache:
-                p_p = Mp.logits[..., corrected_gamma, :]
+                p_p = Mp.logits[..., -1, :]  # Last logit is for bonus token
             else:
                 p_p = Mp.logits[..., current_position + corrected_gamma - 1, :]
             p_p = sampler(p_p)
         else:
             if use_cache:
-                drafter_cache = prune_cache(drafter_cache, corrected_gamma - n)
-                target_cache = prune_cache(target_cache, corrected_gamma - n + 1)
+                # Prune cache and update cache lengths
+                tokens_to_prune_drafter = corrected_gamma - n
+                tokens_to_prune_target = corrected_gamma - n + 1
+                drafter_cache = prune_cache(drafter_cache, tokens_to_prune_drafter)
+                target_cache = prune_cache(target_cache, tokens_to_prune_target)
+                drafter_cache_len -= tokens_to_prune_drafter
+                target_cache_len -= tokens_to_prune_target
             
             if not skip_sample_adjustment:
                 diff = p[..., n, :] - q[0, n, :]
@@ -290,4 +311,3 @@ def dynamic_speculative_generate(
     
     stats = scheduler.get_stats()
     return input_ids[0, prompt_len:].tolist(), stats["avg_acceptance_rate"], stats
-
