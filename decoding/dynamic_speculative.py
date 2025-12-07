@@ -91,6 +91,7 @@ class DynamicGammaScheduler:
             "total_speculated": total_speculated,
             "num_steps": len(self._history),
             "final_gamma": self.gamma,
+            "gamma_history": [h[1] for h in self._history],
         }
 
 
