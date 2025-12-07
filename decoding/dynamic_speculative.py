@@ -214,7 +214,14 @@ def dynamic_speculative_generate(
             use_cache=use_cache
         )
         target_cache = Mp.past_key_values
-        draft_logits = Mp.logits[..., current_position - 1:current_position + corrected_gamma - 1, :]
+        
+        # Extract logits for draft token positions
+        # With cache: logits only has new positions, so slice from start
+        # Without cache: logits has all positions, slice at current_position - 1
+        if use_cache:
+            draft_logits = Mp.logits[..., :corrected_gamma, :]
+        else:
+            draft_logits = Mp.logits[..., current_position - 1:current_position + corrected_gamma - 1, :]
         p = sampler(draft_logits)
         
         # Rejection sampling
@@ -242,7 +249,11 @@ def dynamic_speculative_generate(
 
         # Sample next token
         if n == corrected_gamma:
-            p_p = Mp.logits[..., current_position + corrected_gamma - 1, :]
+            # All drafts accepted, get bonus token from position after last draft
+            if use_cache:
+                p_p = Mp.logits[..., corrected_gamma, :]
+            else:
+                p_p = Mp.logits[..., current_position + corrected_gamma - 1, :]
             p_p = sampler(p_p)
         else:
             if use_cache:
