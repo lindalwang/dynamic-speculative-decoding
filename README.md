@@ -25,8 +25,8 @@ python inference.py --config config/base.yaml
 
 Edit `config/base.yaml` to change:
 - Target/drafter models
-- Generation parameters (gamma, max_length)
-- Sampling strategy (greedy, top-k, nucleus)
+- Generation parameters (gamma, max_length, use_cache)
+- Sampling strategy (greedy, multinomial, top-k, nucleus, top-k + nucleus)
 
 
 ## References
